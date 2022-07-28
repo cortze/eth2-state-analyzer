@@ -20,3 +20,5 @@ func GetValIndexesFromJson(filePath string) ([]uint64, error) {
 	return validatorIndex, nil
 
 }
+
+// func ArrayIntersection()

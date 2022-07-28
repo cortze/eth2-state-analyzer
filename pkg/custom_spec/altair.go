@@ -2,26 +2,35 @@ package custom_spec
 
 import (
 	"fmt"
+	"math"
 
+	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cortze/eth2-state-analyzer/pkg/utils"
 	"github.com/prysmaticlabs/go-bitfield"
 )
 
 type AltairSpec struct {
-	BState      spec.VersionedBeaconState
-	Committees  map[string]bitfield.Bitlist
-	DoubleVotes uint64
+	BState        spec.VersionedBeaconState
+	Committees    map[string]bitfield.Bitlist
+	DoubleVotes   uint64
+	Api           *http.Service
+	EpochStructs  EpochData
+	AttestingVals []uint64
 }
 
-func NewAltairSpec(bstate *spec.VersionedBeaconState) AltairSpec {
+func NewAltairSpec(bstate *spec.VersionedBeaconState, iApi *http.Service) AltairSpec {
 	altairObj := AltairSpec{
-		BState:      *bstate,
-		Committees:  make(map[string]bitfield.Bitlist),
-		DoubleVotes: 0,
+		BState:        *bstate,
+		Committees:    make(map[string]bitfield.Bitlist),
+		DoubleVotes:   0,
+		Api:           iApi,
+		EpochStructs:  NewEpochData(iApi, bstate.Altair.Slot),
+		AttestingVals: make([]uint64, 0),
 	}
-	altairObj.PreviousEpochAttestations()
+	altairObj.CalculatePreviousAttestingVals()
 
 	return altairObj
 }
@@ -34,20 +43,40 @@ func (p AltairSpec) CurrentEpoch() uint64 {
 	return uint64(p.CurrentSlot() / 32)
 }
 
-func (p AltairSpec) PreviousEpochAttestations() uint64 {
-	numOfAttestations := 0
-	attestationsPerVal := p.BState.Altair.PreviousEpochParticipation
+func (p AltairSpec) PrevStateSlot() uint64 {
+	// return p.PrevBState.Phase0.Slot
+	return 0
+}
 
-	for _, item := range attestationsPerVal {
+func (p AltairSpec) PrevStateEpoch() uint64 {
+	return uint64(p.PrevStateSlot() / 32)
+}
+
+func (p *AltairSpec) CalculatePreviousAttestingVals() {
+	flag := altair.ParticipationFlags(math.Pow(2, float64(altair.TimelySourceFlagIndex)))
+
+	for valIndex, item := range p.BState.Altair.PreviousEpochParticipation {
 		// Here we have one item per validator
 		// This is an 8-bit string, where the bit 0 is the source
 		// If it is set, we consider there was a vote from this validator
-		if utils.IsBitSet(uint8(item), 0) {
-			numOfAttestations++
+		// if utils.IsBitSet(uint8(item), 0) {
+		// }
+
+		if (item & flag) == flag {
+			// The attestation has a timely source value, therefore we consider it attest
+			p.AttestingVals = append(p.AttestingVals, uint64(valIndex))
 		}
 	}
+}
 
-	return uint64(numOfAttestations)
+func (p AltairSpec) PreviousEpochAttestations() uint64 {
+
+	return uint64(len(p.AttestingVals))
+
+}
+
+func (p AltairSpec) GetValidatorBalance(valIdx uint64) uint64 {
+	return p.BState.Altair.Balances[valIdx]
 
 }
 
@@ -91,4 +120,34 @@ func (p AltairSpec) Balance(valIdx uint64) (uint64, error) {
 	balance := p.BState.Altair.Balances[valIdx]
 
 	return balance, nil
+}
+
+func (p AltairSpec) GetMaxProposerAttReward(valIdx uint64, valPubKey phase0.BLSPubKey, valEffectiveBalance uint64, totalEffectiveBalance uint64) float64 {
+
+	return 0
+
+}
+
+func (p AltairSpec) GetMaxSyncComReward(valIdx uint64, valPubKey phase0.BLSPubKey, valEffectiveBalance uint64, totalEffectiveBalance uint64) float64 {
+
+	return 0
+
+}
+
+func (p AltairSpec) GetMaxAttestationReward(valIdx uint64, valEffectiveBalance uint64, totalEffectiveBalance uint64) float64 {
+
+	return 0
+}
+
+func (p AltairSpec) GetMaxReward(valIdx uint64) (uint64, error) {
+
+	return 0, nil
+}
+
+func (p AltairSpec) GetAttestingSlot(valIdx uint64) uint64 {
+	return 0
+}
+
+func (p AltairSpec) PrevEpochReward(valIdx uint64) uint64 {
+	return 0
 }
